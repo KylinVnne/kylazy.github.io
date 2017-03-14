@@ -3,6 +3,13 @@
   
     
     <entry>
+      <title><![CDATA[inode耗尽导致应用故障]]></title>
+      <url>%2F%2Fblog%2F2017%2F03%2FInode%20depletion%20leads%20to%20application%20failures.html</url>
+      <content type="text"><![CDATA[前言本文为与inode相关的企业服务器实战案例。 错误现象往磁盘里写入文件时报错： No space left on device.查看磁盘空间信息，显示还剩下大量未用空间。 分析思路 利用df -h命令，从磁盘输出信息可知，所有分区物理磁盘空间尚有剩余；进而考虑inode节点的磁盘空间，用df -i命令，查看系统可用的inode节点，由输出可知，果然是inode节点耗尽导致无法文件写入磁盘。 查找原因通过检查/var目录，发现/var/postfix/maildrop/这个目录下有大量的小文件，分析产生原因，应该是系统的crontab定时任务导致的，由于系统存在多个crontab任务, 倘如crontab任务没有重定向，默认就会在该目录下创建文件，日积月累，使得该文件夹被小文件填满导致inode节点数不够，最终报错。 提示CentOS 5系列系统默认安装Sendmail服务，邮件临时存放路径为/var/spool/clientmqueue/。 CentOS 6系统默认用Postfix服务取代了Sendmail服务，邮件存放路径为/var/postfix/maildrop/。 系统定时任务crontab里的命令后没有接&gt;del/null 2&gt;&amp;1时，而crontab中执行的程序有输出内容，输出内容会以邮件形式发给crontab的用户，但邮件服务没有启动所以就会产生大量小文件。 解决问题 删除该目录下的所有文件即可。由于此处文件较多，直接用rm命令可能会出现[Argument list too long]的错误，可以加管道或者用find命令删除。 将crontab里的命令后接上&gt;del/null 2&gt;&amp;1，使其输出被文件系统自动抛弃。 find命令删除1$ find /var/postfix/maildrop -name * -exec rm -rf &#123;&#125; \; |xargs删除1$ ls /var/postfix/maildrop |xargs rm -rf 知识小结 inode是存放文件属性信息的（也包含指向文件实体的指针,此处没有文件名称），默认大小128字节（C5），256字节（C6）。 block是存放文件实际内容的，默认大小1K（boot）或4K（非系统分区）。 一个文件至少要占用一个inode及一个block。 默认分区常规情况下，inode数量是足够的，而block数量会消耗得更快。]]></content>
+    </entry>
+
+    
+    <entry>
       <title><![CDATA[Hello World]]></title>
       <url>%2F%2Fblog%2F2017%2F03%2Fhello-world.html</url>
       <content type="text"><![CDATA[Welcome to Hexo! This is your very first post. Check documentation for more info. If you get any problems when using Hexo, you can find the answer in troubleshooting or you can ask me on GitHub. Quick StartCreate a new post1$ hexo new "My New Post" More info: Writing Run server1$ hexo server More info: Server Generate static files1$ hexo generate More info: Generating Deploy to remote sites1$ hexo deploy More info: Deployment]]></content>

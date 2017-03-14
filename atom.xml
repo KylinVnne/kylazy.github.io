@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="https://kylinvnne.github.io/"/>
-  <updated>2017-03-11T13:02:34.000Z</updated>
+  <updated>2017-03-14T07:38:30.635Z</updated>
   <id>https://kylinvnne.github.io/</id>
   
   <author>
@@ -14,6 +14,52 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>inode耗尽导致应用故障</title>
+    <link href="https://kylinvnne.github.io//blog/2017/03/Inode%20depletion%20leads%20to%20application%20failures.html"/>
+    <id>https://kylinvnne.github.io//blog/2017/03/Inode depletion leads to application failures.html</id>
+    <published>2017-03-14T06:05:13.000Z</published>
+    <updated>2017-03-14T07:38:30.635Z</updated>
+    
+    <content type="html"><![CDATA[<h2 id="前言"><a href="#前言" class="headerlink" title="前言"></a>前言</h2><p>本文为与<code>inode</code>相关的企业服务器实战案例。</p>
+<a id="more"></a>
+<h2 id="错误现象"><a href="#错误现象" class="headerlink" title="错误现象"></a>错误现象</h2><p>往磁盘里写入文件时报错：  <code>No space left on device.</code><br>查看磁盘空间信息，显示还剩下大量未用空间。</p>
+<h2 id="分析思路"><a href="#分析思路" class="headerlink" title="分析思路"></a>分析思路</h2><p> 利用<code>df -h</code>命令，从磁盘输出信息可知，所有分区物理磁盘空间尚有剩余；进而考虑<code>inode</code>节点的磁盘空间，用<code>df -i</code>命令，查看系统可用的<code>inode</code>节点，由输出可知，果然是<code>inode</code>节点耗尽导致无法文件写入磁盘。</p>
+<h2 id="查找原因"><a href="#查找原因" class="headerlink" title="查找原因"></a>查找原因</h2><p>通过检查<code>/var</code>目录，发现<code>/var/postfix/maildrop/</code>这个目录下有大量的小文件，分析产生原因，应该是系统的<code>crontab</code>定时任务导致的，由于系统存在多个<code>crontab</code>任务, 倘如<code>crontab</code>任务没有重定向，默认就会在该目录下创建文件，日积月累，使得该文件夹被小文件填满<br>导致<code>inode</code>节点数不够，最终报错。</p>
+<h3 id="提示"><a href="#提示" class="headerlink" title="提示"></a>提示</h3><p><code>CentOS 5</code>系列系统默认安装<code>Sendmail</code>服务，邮件临时存放路径为<code>/var/spool/clientmqueue/</code>。</p>
+<p><code>CentOS 6</code>系统默认用<code>Postfix</code>服务取代了<code>Sendmail</code>服务，邮件存放路径为<code>/var/postfix/maildrop/</code>。</p>
+<p>系统定时任务<code>crontab</code>里的命令后没有接<code>&gt;del/null 2&gt;&amp;1</code>时，而<code>crontab</code>中执行的程序有输出内容，输出内容会以邮件形式发给<code>crontab</code>的用户，但邮件服务没有启动所以就会产生大量小文件。 </p>
+<h2 id="解决问题"><a href="#解决问题" class="headerlink" title="解决问题"></a>解决问题</h2><ol>
+<li><p>删除该目录下的所有文件即可。由于此处文件较多，直接用<code>rm</code>命令可能会出现<code>[Argument list too long]</code>的错误，可以加管道或者用<code>find</code>命令删除。</p>
+</li>
+<li><p>将<code>crontab</code>里的命令后接上<code>&gt;del/null 2&gt;&amp;1</code>，使其输出被文件系统自动抛弃。</p>
+</li>
+</ol>
+<h3 id="find命令删除"><a href="#find命令删除" class="headerlink" title="find命令删除"></a>find命令删除</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ find /var/postfix/maildrop -name * -exec rm -rf &#123;&#125; \;</div></pre></td></tr></table></figure>
+<h3 id="xargs删除"><a href="#xargs删除" class="headerlink" title="|xargs删除"></a>|xargs删除</h3><figure class="highlight bash"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">$ ls /var/postfix/maildrop |xargs rm -rf</div></pre></td></tr></table></figure>
+<h2 id="知识小结"><a href="#知识小结" class="headerlink" title="知识小结"></a>知识小结</h2><ol>
+<li><code>inode</code>是存放文件属性信息的（也包含指向文件实体的指针,此处没有文件名称），默认大小128字节（<code>C5</code>），256字节（<code>C6</code>）。</li>
+<li><code>block</code>是存放文件实际内容的，默认大小1K（<code>boot</code>）或4K（非系统分区）。</li>
+<li>一个文件至少要占用一个<code>inode</code>及一个<code>block</code>。</li>
+<li>默认分区常规情况下，<code>inode</code>数量是足够的，而block数量会消耗得更快。</li>
+</ol>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;h2 id=&quot;前言&quot;&gt;&lt;a href=&quot;#前言&quot; class=&quot;headerlink&quot; title=&quot;前言&quot;&gt;&lt;/a&gt;前言&lt;/h2&gt;&lt;p&gt;本文为与&lt;code&gt;inode&lt;/code&gt;相关的企业服务器实战案例。&lt;/p&gt;
+    
+    </summary>
+    
+      <category term="运维实战" scheme="https://kylinvnne.github.io/categories/%E8%BF%90%E7%BB%B4%E5%AE%9E%E6%88%98/"/>
+    
+    
+      <category term="Inode" scheme="https://kylinvnne.github.io/tags/Inode/"/>
+    
+      <category term="Linux" scheme="https://kylinvnne.github.io/tags/Linux/"/>
+    
+  </entry>
   
   <entry>
     <title>Hello World</title>
